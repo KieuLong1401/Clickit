@@ -14,12 +14,20 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.WindowManager.LayoutParams
+
+interface Bubble {
+    val view: View
+    val params: LayoutParams
+    fun show()
+    fun hide()
+    fun update()
+}
 
 class FloatingBubbleService : Service() {
 
     private lateinit var windowManager: WindowManager
-    private lateinit var bubbleView: View
-    private lateinit var bubbleDeleteView: View
+    private lateinit var bubbleList: MutableList<Bubble>
 
     override fun onBind(intent: Intent): IBinder? = null
 
@@ -27,7 +35,42 @@ class FloatingBubbleService : Service() {
         super.onCreate()
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        bubbleList = mutableListOf<Bubble>()
         val inflater = LayoutInflater.from(this)
+
+        fun createBubble(layout: Int, x: Int, y: Int): Bubble {
+            val params = LayoutParams(
+                LayoutParams.WRAP_CONTENT,
+                LayoutParams.WRAP_CONTENT,
+                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    LayoutParams.TYPE_PHONE,
+                LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
+            params.gravity = Gravity.TOP or Gravity.START
+            params.x = x
+            params.y = y
+
+            val newBubble = object: Bubble {
+                override val view = inflater.inflate(layout, null)
+                override val params = params
+                override fun show() {
+                    windowManager.addView(view, params)
+                }
+                override fun hide() {
+                    windowManager.removeView(view)
+                }
+
+                override fun update() {
+                    windowManager.updateViewLayout(view, params)
+                }
+            }
+            bubbleList += newBubble
+
+            return newBubble
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel("bubble", "Floating Bubble", NotificationManager.IMPORTANCE_LOW)
@@ -42,40 +85,13 @@ class FloatingBubbleService : Service() {
             startForeground(1, notification)
         }
 
-        bubbleDeleteView = inflater.inflate(R.layout.delete_bubble_layout, null)
+        val bubbleDeleteBubble = createBubble(R.layout.delete_bubble_layout, resources.displayMetrics.widthPixels / 2 - 80, resources.displayMetrics.heightPixels - 260)
 
-        val bubbleDeleteParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        )
-        bubbleDeleteParams.gravity = Gravity.TOP or Gravity.START
-        bubbleDeleteParams.x = resources.displayMetrics.widthPixels / 2 - 80
-        bubbleDeleteParams.y = resources.displayMetrics.heightPixels - 260
+        val controllerBubble = createBubble(R.layout.bubble_layout, 0, 100)
 
-        bubbleView = inflater.inflate(R.layout.bubble_layout, null)
-        val bubbleParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        )
-        bubbleParams.gravity = Gravity.TOP or Gravity.START
-        bubbleParams.x = 0
-        bubbleParams.y = 100
+        controllerBubble.show()
 
-        windowManager.addView(bubbleView, bubbleParams)
-
-        bubbleView.setOnTouchListener(object : View.OnTouchListener {
+        controllerBubble.view.setOnTouchListener(object : View.OnTouchListener {
             private var lastX = 0
             private var lastY = 0
             private var initialX = 0
@@ -86,10 +102,10 @@ class FloatingBubbleService : Service() {
                     MotionEvent.ACTION_DOWN -> {
                         lastX = event.rawX.toInt()
                         lastY = event.rawY.toInt()
-                        initialX = bubbleParams.x
-                        initialY = bubbleParams.y
+                        initialX = controllerBubble.params.x
+                        initialY = controllerBubble.params.y
 
-                        windowManager.addView(bubbleDeleteView, bubbleDeleteParams)
+                        bubbleDeleteBubble.show()
 
                         return true
                     }
@@ -97,20 +113,22 @@ class FloatingBubbleService : Service() {
                     MotionEvent.ACTION_MOVE -> {
                         val dx = event.rawX.toInt() - lastX
                         val dy = event.rawY.toInt() - lastY
-                        bubbleParams.x = initialX + dx
-                        bubbleParams.y = initialY + dy
-                        windowManager.updateViewLayout(bubbleView, bubbleParams)
+                        controllerBubble.params.x = initialX + dx
+                        controllerBubble.params.y = initialY + dy
+                        controllerBubble.update()
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        if(bubbleParams.x <= bubbleDeleteParams.x + 60 &&
-                            bubbleParams.x + 60 >= bubbleDeleteParams.x &&
-                            bubbleParams.y <= bubbleDeleteParams.y + 60 &&
-                            bubbleParams.y + 60 >= bubbleDeleteParams.y) {
+                        v.performClick()
+                        if(controllerBubble.params.x <= bubbleDeleteBubble.params.x + 60 &&
+                            controllerBubble.params.x + 60 >= bubbleDeleteBubble.params.x &&
+                            controllerBubble.params.y <= bubbleDeleteBubble.params.y + 60 &&
+                            controllerBubble.params.y + 60 >= bubbleDeleteBubble.params.y) {
+
                             stopSelf()
                         }
-                        windowManager.removeView(bubbleDeleteView)
 
+                        bubbleDeleteBubble.hide()
                         return true
                     }
                 }
@@ -121,6 +139,8 @@ class FloatingBubbleService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if(::bubbleView.isInitialized) windowManager.removeView(bubbleView)
+        bubbleList.forEach {
+            if(it.view.isAttachedToWindow) it.hide()
+        }
     }
 }
