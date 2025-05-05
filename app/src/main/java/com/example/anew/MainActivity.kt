@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -12,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.TextUtils
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -65,6 +67,27 @@ import androidx.core.app.ServiceCompat.startForeground
 import androidx.core.content.ContextCompat
 import com.example.anew.ui.theme.NewTheme
 
+fun isAccessibilityServiceEnabled(context: Context, service: Class<out android.accessibilityservice.AccessibilityService>): Boolean {
+    val expectedComponentName = ComponentName(context, service)
+
+    val enabledServicesSetting = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    ) ?: return false
+
+    val colonSplitter = TextUtils.SimpleStringSplitter(':')
+    colonSplitter.setString(enabledServicesSetting)
+
+    for (serviceName in colonSplitter) {
+        val enabledComponent = ComponentName.unflattenFromString(serviceName)
+        if (enabledComponent == expectedComponentName) {
+            return true
+        }
+    }
+
+    return false
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +96,12 @@ class MainActivity : ComponentActivity() {
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package: clickit"))
             startActivityForResult(intent, 100)
         }
+        if (!isAccessibilityServiceEnabled(this, ClickService::class.java)) {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            startActivity(intent)
+        }
+
 
         enableEdgeToEdge()
         setContent {
