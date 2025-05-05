@@ -10,7 +10,7 @@
         android:id="@+id/bubble"
         android:layout_width="60dp"
         android:layout_height="60dp"
-        android:background="@drawable/bubble_background"
+        android:background="@drawable/ic_bubble_background"
         android:padding="10dp">
         <ImageView
             android:layout_width="40dp"
