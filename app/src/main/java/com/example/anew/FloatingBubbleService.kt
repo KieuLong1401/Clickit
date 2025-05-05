@@ -8,13 +8,17 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
+import android.widget.ImageButton
+import androidx.core.view.isVisible
 
 interface Bubble {
     val view: View
@@ -23,20 +27,22 @@ interface Bubble {
     fun hide()
     fun update()
 }
+interface Position {
+    val x: Float
+    val y: Float
+}
 
 class FloatingBubbleService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var bubbleList: MutableList<Bubble>
-
-    override fun onBind(intent: Intent): IBinder? = null
+    private lateinit var inflater: LayoutInflater
 
     override fun onCreate() {
         super.onCreate()
-
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         bubbleList = mutableListOf<Bubble>()
-        val inflater = LayoutInflater.from(this)
+        inflater = LayoutInflater.from(this)
 
         fun createBubble(layout: Int, x: Int, y: Int): Bubble {
             val params = LayoutParams(
@@ -56,13 +62,13 @@ class FloatingBubbleService : Service() {
             val newBubble = object: Bubble {
                 override val view = inflater.inflate(layout, null)
                 override val params = params
+
                 override fun show() {
                     windowManager.addView(view, params)
                 }
                 override fun hide() {
                     windowManager.removeView(view)
                 }
-
                 override fun update() {
                     windowManager.updateViewLayout(view, params)
                 }
@@ -70,6 +76,17 @@ class FloatingBubbleService : Service() {
             bubbleList += newBubble
 
             return newBubble
+        }
+        fun getViewCenterPosition(view: View): Position {
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+            val x = location[0] + view.width / 2f
+            val y = location[1] + view.height / 2f
+
+            return object: Position {
+                override val x = x
+                override val y = y
+            }
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -86,16 +103,26 @@ class FloatingBubbleService : Service() {
         }
 
         val bubbleDeleteBubble = createBubble(R.layout.delete_bubble_layout, resources.displayMetrics.widthPixels / 2 - 80, resources.displayMetrics.heightPixels - 260)
-
         val controllerBubble = createBubble(R.layout.bubble_layout, 0, 100)
-
         controllerBubble.show()
+        val clickBubble = createBubble(R.layout.crosshair_layout, 300, 300)
+        clickBubble.show()
 
-        controllerBubble.view.setOnTouchListener(object : View.OnTouchListener {
+
+        controllerBubble.view.findViewById<View>(R.id.bubble).setOnTouchListener(object : View.OnTouchListener {
             private var lastX = 0
             private var lastY = 0
             private var initialX = 0
             private var initialY = 0
+            private val longPressThreshold = 500L
+            private var isLongPress = false
+
+            private val handler = Handler(Looper.getMainLooper())
+            private val longPressRunnable = Runnable {
+                isLongPress = true
+                if(!bubbleDeleteBubble.view.isAttachedToWindow) bubbleDeleteBubble.show()
+            }
+
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 when(event.action) {
@@ -105,7 +132,8 @@ class FloatingBubbleService : Service() {
                         initialX = controllerBubble.params.x
                         initialY = controllerBubble.params.y
 
-                        bubbleDeleteBubble.show()
+                        isLongPress = false
+                        handler.postDelayed(longPressRunnable, longPressThreshold)
 
                         return true
                     }
@@ -116,10 +144,14 @@ class FloatingBubbleService : Service() {
                         controllerBubble.params.x = initialX + dx
                         controllerBubble.params.y = initialY + dy
                         controllerBubble.update()
+
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
                         v.performClick()
+
+                        handler.removeCallbacks(longPressRunnable)
+
                         if(controllerBubble.params.x <= bubbleDeleteBubble.params.x + 60 &&
                             controllerBubble.params.x + 60 >= bubbleDeleteBubble.params.x &&
                             controllerBubble.params.y <= bubbleDeleteBubble.params.y + 60 &&
@@ -128,7 +160,54 @@ class FloatingBubbleService : Service() {
                             stopSelf()
                         }
 
-                        bubbleDeleteBubble.hide()
+                        if(bubbleDeleteBubble.view.isAttachedToWindow) bubbleDeleteBubble.hide()
+
+                        val controllerView = controllerBubble.view.findViewById<View>(R.id.controller)
+
+                        if(!isLongPress) controllerView.visibility = if (controllerView.isVisible) View.GONE else View.VISIBLE
+
+                        return true
+                    }
+                }
+                return false
+            }
+        })
+        controllerBubble.view.findViewById<ImageButton>(R.id.play).setOnClickListener {
+            val clickBubblePosition = getViewCenterPosition(clickBubble.view)
+            ClickService.x = clickBubblePosition.x
+            ClickService.y = clickBubblePosition.y
+
+            clickBubble.params.flags = if (ClickService.isClicking) LayoutParams.FLAG_NOT_FOCUSABLE else LayoutParams.FLAG_NOT_FOCUSABLE or LayoutParams.FLAG_NOT_TOUCHABLE
+            windowManager.updateViewLayout(clickBubble.view, clickBubble.params)
+
+            ClickService.isClicking = !ClickService.isClicking
+        }
+        clickBubble.view.setOnTouchListener(object : View.OnTouchListener {
+            private var lastX = 0
+            private var lastY = 0
+            private var initialX = 0
+            private var initialY = 0
+
+            override fun onTouch(v: View, event: MotionEvent): Boolean {
+                when(event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        v.performClick()
+
+                        lastX = event.rawX.toInt()
+                        lastY = event.rawY.toInt()
+                        initialX = clickBubble.params.x
+                        initialY = clickBubble.params.y
+
+                        return true
+                    }
+
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.rawX.toInt() - lastX
+                        val dy = event.rawY.toInt() - lastY
+                        clickBubble.params.x = initialX + dx
+                        clickBubble.params.y = initialY + dy
+                        clickBubble.update()
+
                         return true
                     }
                 }
@@ -137,6 +216,7 @@ class FloatingBubbleService : Service() {
         })
     }
 
+    override fun onBind(intent: Intent): IBinder? = null
     override fun onDestroy() {
         super.onDestroy()
         bubbleList.forEach {
