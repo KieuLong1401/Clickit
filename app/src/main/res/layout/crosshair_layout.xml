@@ -7,6 +7,6 @@
     <ImageView
         android:layout_width="100dp"
         android:layout_height="100dp"
-        android:src="@drawable/crosshair"
+        android:src="@drawable/ic_crosshair"
         android:contentDescription="@string/ic_crosshair_desc"/>
 </LinearLayout>
