@@ -9,22 +9,15 @@ import android.os.Looper
 
 class ClickService : AccessibilityService() {
     companion object {
-        var isClicking = false
-        var x = 0f
-        var y = 0f
+        var instance: ClickService? = null
+        var isClicking: Boolean = false
     }
+
+    private lateinit var clickRunnable: Runnable
 
     private val handler = Handler(Looper.getMainLooper())
-    private val clickRunnable = object : Runnable {
-        override fun run() {
-            if (isClicking) {
-                simulateClick(x, y)
-            }
-            handler.postDelayed(this, 300)
-        }
-    }
 
-    fun simulateClick(x: Float, y: Float) {
+    private fun simulateClick(x: Float, y: Float) {
         handler.post {
             val path = Path().apply { moveTo(x, y) }
             val gesture = GestureDescription.Builder()
@@ -34,8 +27,31 @@ class ClickService : AccessibilityService() {
         }
     }
 
-    override fun onServiceConnected() {
+    fun start(x: Float, y: Float, clickDelay: Long) {
+
+        clickRunnable = object : Runnable {
+            override fun run() {
+                simulateClick(x, y)
+
+                handler.postDelayed(this, clickDelay)
+            }
+        }
+
         handler.post(clickRunnable)
+        isClicking = true
+    }
+    fun stop() {
+        handler.removeCallbacks(clickRunnable)
+        isClicking = false
+    }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        instance = this
+    }
+    override fun onDestroy() {
+        super.onDestroy()
+        instance = null
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
 

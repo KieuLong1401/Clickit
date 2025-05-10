@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         if(!Settings.canDrawOverlays(this)) {
-            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package: clickit"))
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             startActivityForResult(intent, 100)
         }
         if (!isAccessibilityServiceEnabled(this, ClickService::class.java)) {

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="click_interval_units">
+        <item>ms</item>
+        <item>s</item>
+        <item>m</item>
+        <item>h</item>
+    </string-array>
+    <string-array name="stop_after_units">
+        <item>ms</item>
+        <item>s</item>
+        <item>m</item>
+        <item>h</item>
+    </string-array>
+</resources>

@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -15,9 +16,12 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
+import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.Spinner
 import androidx.core.view.isVisible
 
 interface Bubble {
@@ -33,26 +37,28 @@ interface Position {
 }
 
 class FloatingBubbleService : Service() {
-
     private lateinit var windowManager: WindowManager
     private lateinit var bubbleList: MutableList<Bubble>
     private lateinit var inflater: LayoutInflater
 
     override fun onCreate() {
         super.onCreate()
+
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        bubbleList = mutableListOf<Bubble>()
+        bubbleList = mutableListOf()
         inflater = LayoutInflater.from(this)
 
-        fun createBubble(layout: Int, x: Int, y: Int): Bubble {
+        fun createBubble(layout: Int, x: Int, y: Int, fullScreen: Boolean = false, focusable: Boolean = false): Bubble {
+            val size = if (fullScreen) LayoutParams.MATCH_PARENT else LayoutParams.WRAP_CONTENT
+
             val params = LayoutParams(
-                LayoutParams.WRAP_CONTENT,
-                LayoutParams.WRAP_CONTENT,
+                size,
+                size,
                 if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                     LayoutParams.TYPE_APPLICATION_OVERLAY
                 else
                     LayoutParams.TYPE_PHONE,
-                LayoutParams.FLAG_NOT_FOCUSABLE,
+                if(!focusable) LayoutParams.FLAG_NOT_FOCUSABLE else LayoutParams.FLAG_NOT_TOUCH_MODAL or LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
                 PixelFormat.TRANSLUCENT
             )
             params.gravity = Gravity.TOP or Gravity.START
@@ -88,6 +94,18 @@ class FloatingBubbleService : Service() {
                 override val y = y
             }
         }
+        fun targetedChildNotClicked(parent: View, event: MotionEvent): Boolean {
+            if (parent !is ViewGroup) return true
+            for (i in 0 until parent.childCount) {
+                val child = parent.getChildAt(i)
+                val childRect = Rect()
+                child.getHitRect(childRect)
+                if (child.isVisible && childRect.contains(event.x.toInt(), event.y.toInt())) {
+                    return false
+                }
+            }
+            return true
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel("bubble", "Floating Bubble", NotificationManager.IMPORTANCE_LOW)
@@ -103,18 +121,37 @@ class FloatingBubbleService : Service() {
         }
 
         val bubbleDeleteBubble = createBubble(R.layout.delete_bubble_layout, resources.displayMetrics.widthPixels / 2 - 80, resources.displayMetrics.heightPixels - 260)
+        val settingPopup = createBubble(R.layout.setting_popup_layout, 0, 0, fullScreen = true, focusable = true)
         val controllerBubble = createBubble(R.layout.bubble_layout, 0, 100)
         controllerBubble.show()
         val clickBubble = createBubble(R.layout.crosshair_layout, 300, 300)
         clickBubble.show()
 
+        val logoBubble = controllerBubble.view.findViewById<View>(R.id.bubble)
+        val playButton = controllerBubble.view.findViewById<ImageButton>(R.id.play)
+        val settingButton = controllerBubble.view.findViewById<View>(R.id.setting)
 
-        controllerBubble.view.findViewById<View>(R.id.bubble).setOnTouchListener(object : View.OnTouchListener {
+        fun getClickDelay(): Long {
+            val clickIntervalValue = settingPopup.view.findViewById<EditText>(R.id.interval_value).text.toString().toLong()
+            val clickIntervalUnit = settingPopup.view.findViewById<Spinner>(R.id.interval_unit).selectedItem.toString()
+
+            println("$clickIntervalValue $clickIntervalUnit")
+
+            return when (clickIntervalUnit) {
+                "ms" ->  clickIntervalValue
+                "s" ->  clickIntervalValue * 1000
+                "m" ->  clickIntervalValue * 1000 * 60
+                "h" ->  clickIntervalValue * 1000 * 60 * 60
+                else -> throw IllegalArgumentException("Unknown click interval unit: $clickIntervalUnit")
+            }
+        }
+
+        logoBubble.setOnTouchListener(object : View.OnTouchListener {
             private var lastX = 0
             private var lastY = 0
             private var initialX = 0
             private var initialY = 0
-            private val longPressThreshold = 500L
+            private val longPressThreshold = 400L
             private var isLongPress = false
 
             private val handler = Handler(Looper.getMainLooper())
@@ -125,6 +162,11 @@ class FloatingBubbleService : Service() {
 
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
+                val controllerView = controllerBubble.view.findViewById<View>(R.id.controller)
+                val controllerViewVisibility: Int
+
+                if (ClickService.isClicking) return false
+
                 when(event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         lastX = event.rawX.toInt()
@@ -162,9 +204,9 @@ class FloatingBubbleService : Service() {
 
                         if(bubbleDeleteBubble.view.isAttachedToWindow) bubbleDeleteBubble.hide()
 
-                        val controllerView = controllerBubble.view.findViewById<View>(R.id.controller)
+                        controllerViewVisibility = if (controllerView.isVisible) View.GONE else View.VISIBLE
 
-                        if(!isLongPress) controllerView.visibility = if (controllerView.isVisible) View.GONE else View.VISIBLE
+                        if(!isLongPress) controllerView.visibility = controllerViewVisibility
 
                         return true
                     }
@@ -172,16 +214,45 @@ class FloatingBubbleService : Service() {
                 return false
             }
         })
-        controllerBubble.view.findViewById<ImageButton>(R.id.play).setOnClickListener {
-            val clickBubblePosition = getViewCenterPosition(clickBubble.view)
-            ClickService.x = clickBubblePosition.x
-            ClickService.y = clickBubblePosition.y
-
+        playButton.setOnClickListener {
             clickBubble.params.flags = if (ClickService.isClicking) LayoutParams.FLAG_NOT_FOCUSABLE else LayoutParams.FLAG_NOT_FOCUSABLE or LayoutParams.FLAG_NOT_TOUCHABLE
             windowManager.updateViewLayout(clickBubble.view, clickBubble.params)
 
-            ClickService.isClicking = !ClickService.isClicking
+            val clickBubblePosition = getViewCenterPosition(clickBubble.view)
+
+            if (ClickService.isClicking) {
+                ClickService.instance?.stop()
+            } else {
+                ClickService.instance?.start(clickBubblePosition.x, clickBubblePosition.y, getClickDelay())
+            }
+
+            bubbleList.forEach {
+                val opacity = if (ClickService.isClicking) 0.5f else 1f
+
+                it.view.alpha = opacity
+
+                if (it.view.findViewById<View>(R.id.bubble) != null) {
+                    it.view.alpha = 1f
+                    it.view.findViewById<View>(R.id.bubble).alpha = opacity
+                    it.view.findViewById<View>(R.id.setting).alpha = opacity
+                }
+            }
         }
+        settingButton.setOnClickListener {
+            if (ClickService.isClicking) return@setOnClickListener
+
+            settingPopup.show()
+        }
+        settingPopup.view.setOnTouchListener { v, event ->
+            v.performClick()
+            if (event.action == MotionEvent.ACTION_DOWN && targetedChildNotClicked(v, event)) {
+                settingPopup.hide()
+                true
+            } else {
+                false
+            }
+        }
+
         clickBubble.view.setOnTouchListener(object : View.OnTouchListener {
             private var lastX = 0
             private var lastY = 0
@@ -189,6 +260,7 @@ class FloatingBubbleService : Service() {
             private var initialY = 0
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
+                if (ClickService.isClicking) return false
                 when(event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         v.performClick()
