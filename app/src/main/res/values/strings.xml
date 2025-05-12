@@ -1,6 +1,13 @@
 <resources>
     <string name="app_name">Clickit</string>
-    <string name="ic_play_desc">play button</string>
-    <string name="ic_setting_desc">setting button</string>
-    <string name="ic_crosshair_desc">click bubble</string>
+    <string name="ic_play_desc">play</string>
+    <string name="ic_setting_desc">setting</string>
+    <string name="ic_crosshair_desc">crosshair bubble</string>
+    <string name="default_click_interval">300</string>
+    <string name="default_stop_after">1000</string>
+    <string name="save_button">save</string>
+    <string name="stop_after_title">stop after</string>
+    <string name="click_interval_title">click interval</string>
+    <string name="setting_header">setting</string>
+    <string name="logo">logo</string>
 </resources>

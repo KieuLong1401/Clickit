@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:gravity="center"
@@ -17,11 +18,13 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Setting" />
+            android:text="@string/setting_header"
+            android:textColor="@color/black"/>
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="click interval" />
+            android:text="@string/click_interval_title"
+            android:textColor="@color/black"/>
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -29,17 +32,18 @@
 
             <EditText
                 android:id="@+id/interval_value"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="64dp"
+                android:layout_height="48dp"
                 android:inputType="numberDecimal"
-                android:text="300"
-                />
+                android:text="@string/default_click_interval"
+                android:textAlignment="center"/>
 
             <Spinner
                 android:id="@+id/interval_unit"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:entries="@array/click_interval_units" />
+                android:layout_height="48dp"
+                android:entries="@array/click_interval_units"
+                android:layout_gravity="center"/>
         </LinearLayout>
 
         <LinearLayout
@@ -49,11 +53,12 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="stop after" />
+                android:text="@string/stop_after_title"
+                android:textColor="@color/black"/>
 
             <CheckBox
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
+                android:layout_width="48dp"
+                android:layout_height="48dp" />
         </LinearLayout>
 
         <LinearLayout
@@ -61,30 +66,36 @@
             android:layout_height="wrap_content">
 
             <EditText
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:inputType="numberDecimal" />
+                android:layout_width="64dp"
+                android:layout_height="48dp"
+                android:inputType="numberDecimal"
+                android:text="@string/default_stop_after"
+                android:textAlignment="center"/>
 
             <Spinner
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:entries="@array/click_interval_units" />
+                android:layout_height="48dp"
+                android:entries="@array/stop_after_units"
+                android:layout_gravity="center"/>
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="right">
+            android:layout_gravity="end"
+            style="?android:attr/buttonBarStyle">
 
             <Button
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="cancel" />
+                android:text="@android:string/cancel"
+                style="?android:attr/buttonBarButtonStyle"/>
 
             <Button
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="save" />
+                android:text="@string/save_button"
+                style="?android:attr/buttonBarButtonStyle"/>
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

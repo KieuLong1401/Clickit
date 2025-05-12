@@ -9,6 +9,7 @@
     <ImageView
         android:layout_width="40dp"
         android:layout_height="40dp"
-        android:src="@drawable/ic_launcher_foreground" />
+        android:src="@drawable/ic_launcher_foreground"
+        android:contentDescription="@string/logo"/>
 
 </LinearLayout>
