@@ -66,6 +66,7 @@
             android:layout_height="wrap_content">
 
             <EditText
+                android:id="@+id/stop_after_value"
                 android:layout_width="64dp"
                 android:layout_height="48dp"
                 android:inputType="numberDecimal"
@@ -73,6 +74,7 @@
                 android:textAlignment="center"/>
 
             <Spinner
+                android:id="@+id/stop_after_unit"
                 android:layout_width="wrap_content"
                 android:layout_height="48dp"
                 android:entries="@array/stop_after_units"

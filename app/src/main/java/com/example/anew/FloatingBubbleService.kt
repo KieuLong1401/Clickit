@@ -40,6 +40,7 @@ class FloatingBubbleService : Service() {
     private lateinit var windowManager: WindowManager
     private lateinit var bubbleList: MutableList<Bubble>
     private lateinit var inflater: LayoutInflater
+    private lateinit var handler: Handler
 
     override fun onCreate() {
         super.onCreate()
@@ -47,6 +48,7 @@ class FloatingBubbleService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         bubbleList = mutableListOf()
         inflater = LayoutInflater.from(this)
+        handler = Handler(Looper.getMainLooper())
 
         fun createBubble(layout: Int, x: Int, y: Int, fullScreen: Boolean = false, focusable: Boolean = false): Bubble {
             val size = if (fullScreen) LayoutParams.MATCH_PARENT else LayoutParams.WRAP_CONTENT
@@ -135,14 +137,40 @@ class FloatingBubbleService : Service() {
             val clickIntervalValue = settingPopup.view.findViewById<EditText>(R.id.interval_value).text.toString().toLong()
             val clickIntervalUnit = settingPopup.view.findViewById<Spinner>(R.id.interval_unit).selectedItem.toString()
 
-            println("$clickIntervalValue $clickIntervalUnit")
-
             return when (clickIntervalUnit) {
                 "ms" ->  clickIntervalValue
                 "s" ->  clickIntervalValue * 1000
                 "m" ->  clickIntervalValue * 1000 * 60
                 "h" ->  clickIntervalValue * 1000 * 60 * 60
                 else -> throw IllegalArgumentException("Unknown click interval unit: $clickIntervalUnit")
+            }
+        }
+        fun getClickDuration(): Long {
+            val stopAfterValue = settingPopup.view.findViewById<EditText>(R.id.stop_after_value).text.toString().toLong()
+            val stopAfterUnit = settingPopup.view.findViewById<Spinner>(R.id.stop_after_unit).selectedItem.toString()
+
+            return when (stopAfterUnit) {
+                "ms" ->  stopAfterValue
+                "s" ->  stopAfterValue * 1000
+                "m" ->  stopAfterValue * 1000 * 60
+                "h" ->  stopAfterValue * 1000 * 60 * 60
+                else -> throw IllegalArgumentException("Unknown click interval unit: $stopAfterUnit")
+            }
+        }
+        fun disableControlPanel(disable: Boolean) {
+            clickBubble.params.flags = if (disable) LayoutParams.FLAG_NOT_FOCUSABLE or LayoutParams.FLAG_NOT_TOUCHABLE else LayoutParams.FLAG_NOT_FOCUSABLE
+            windowManager.updateViewLayout(clickBubble.view, clickBubble.params)
+
+            bubbleList.forEach {
+                val opacity = if (disable) 0.5f else 1f
+
+                it.view.alpha = opacity
+
+                if (it.view.findViewById<View>(R.id.bubble) != null) {
+                    it.view.alpha = 1f
+                    it.view.findViewById<View>(R.id.bubble).alpha = opacity
+                    it.view.findViewById<View>(R.id.setting).alpha = opacity
+                }
             }
         }
 
@@ -215,27 +243,20 @@ class FloatingBubbleService : Service() {
             }
         })
         playButton.setOnClickListener {
-            clickBubble.params.flags = if (ClickService.isClicking) LayoutParams.FLAG_NOT_FOCUSABLE else LayoutParams.FLAG_NOT_FOCUSABLE or LayoutParams.FLAG_NOT_TOUCHABLE
-            windowManager.updateViewLayout(clickBubble.view, clickBubble.params)
-
             val clickBubblePosition = getViewCenterPosition(clickBubble.view)
+            val stopClick = Runnable {
+                ClickService.instance?.stop()
+                disableControlPanel(false)
+            }
+
+            disableControlPanel(!ClickService.isClicking)
 
             if (ClickService.isClicking) {
                 ClickService.instance?.stop()
+                handler.removeCallbacks(stopClick)
             } else {
                 ClickService.instance?.start(clickBubblePosition.x, clickBubblePosition.y, getClickDelay())
-            }
-
-            bubbleList.forEach {
-                val opacity = if (ClickService.isClicking) 0.5f else 1f
-
-                it.view.alpha = opacity
-
-                if (it.view.findViewById<View>(R.id.bubble) != null) {
-                    it.view.alpha = 1f
-                    it.view.findViewById<View>(R.id.bubble).alpha = opacity
-                    it.view.findViewById<View>(R.id.setting).alpha = opacity
-                }
+                handler.postDelayed(stopClick, getClickDuration())
             }
         }
         settingButton.setOnClickListener {
